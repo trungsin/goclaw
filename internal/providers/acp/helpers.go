@@ -3,6 +3,7 @@ package acp
 import (
 	"context"
 	"io"
+	"os"
 	"strings"
 	"sync"
 )
@@ -27,7 +28,7 @@ func goclawSessionFromCtx(ctx context.Context) string {
 
 // sensitiveEnvPrefixes lists env var prefixes stripped from ACP subprocesses.
 var sensitiveEnvPrefixes = []string{
-	"GOCLAW", "CLAUDE", "ANTHROPIC", "OPENAI",
+	"GOCLAW", "CLAUDE", "ANTHROPIC", "OPENAI", "XAI_",
 	"DATABASE", "POSTGRES", "MYSQL", "REDIS", "MONGO",
 	"AWS_", "AZURE_", "GOOGLE_", "GCP_",
 	"GITHUB_", "GH_", "GITLAB_", "BITBUCKET_",
@@ -50,7 +51,7 @@ var sensitiveEnvExact = map[string]bool{
 	"DB_DSN": true, "PGPASSWORD": true, "PGUSER": true, "PGHOST": true,
 	"NPM_TOKEN": true, "NPM_CONFIG_TOKEN": true,
 	"HOMEBREW_GITHUB_API_TOKEN": true,
-	"CODECOV_TOKEN": true, "COVERALLS_REPO_TOKEN": true,
+	"CODECOV_TOKEN":             true, "COVERALLS_REPO_TOKEN": true,
 	"SENTRY_DSN": true, "SENTRY_AUTH_TOKEN": true,
 	"SECRET_KEY": true, "JWT_SECRET": true,
 }
@@ -82,6 +83,30 @@ func filterACPEnv(environ []string) []string {
 		filtered = append(filtered, e)
 	}
 	return filtered
+}
+
+// injectGrokAPIKey copies XAI_API_KEY (or GOCLAW_XAI_API_KEY) into grok ACP
+// subprocesses only. Other ACP agents never receive the xAI key.
+func injectGrokAPIKey(environ []string, binary string) []string {
+	if agentBaseName(binary) != "grok" {
+		return environ
+	}
+	key := os.Getenv("XAI_API_KEY")
+	if key == "" {
+		key = os.Getenv("GOCLAW_XAI_API_KEY")
+	}
+	if key == "" {
+		return environ
+	}
+	out := make([]string, 0, len(environ)+1)
+	for _, e := range environ {
+		k, _, _ := strings.Cut(e, "=")
+		if strings.EqualFold(k, "XAI_API_KEY") {
+			continue
+		}
+		out = append(out, e)
+	}
+	return append(out, "XAI_API_KEY="+key)
 }
 
 // limitedWriter captures up to max bytes of output for diagnostics.

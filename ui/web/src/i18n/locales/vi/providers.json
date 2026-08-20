@@ -126,7 +126,7 @@
     "description": "Điều phối các agent lập trình tương thích ACP dưới dạng tiến trình con. Không cần API key.",
     "binary": "Tệp nhị phân",
     "binaryPlaceholder": "claude",
-    "binaryHint": "Đường dẫn hoặc tên tệp nhị phân agent ACP (vd: claude, codex, gemini)",
+    "binaryHint": "Đường dẫn hoặc tên tệp nhị phân agent ACP (vd: claude, codex, gemini, grok)",
     "args": "Tham số",
     "argsPlaceholder": "--profile goclaw",
     "argsHint": "Các tham số cách nhau bởi dấu cách truyền vào tệp nhị phân",

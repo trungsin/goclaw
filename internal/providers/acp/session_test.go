@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -130,12 +131,19 @@ func replyError(r io.Reader, w io.Writer, code int, message string) chan struct{
 
 // --- Initialize tests ---
 
+func TestResolveACPWorkDir_Absolute(t *testing.T) {
+	got := resolveACPWorkDir(".")
+	if !filepath.IsAbs(got) {
+		t.Fatalf("expected absolute cwd, got %q", got)
+	}
+}
+
 func TestACPProcess_Initialize_Success(t *testing.T) {
 	proc, serverW, serverR := buildACPProcess(nil, nil)
 	defer serverW.Close()
 	defer serverR.Close()
 
-	respJSON := `{"agentInfo":{"name":"claude","version":"1.0"},"agentCapabilities":{"loadSession":true}}`
+	respJSON := `{"agentInfo":{"name":"claude","version":"1.0"},"agentCapabilities":{"loadSession":true},"authMethods":[{"id":"cached_token"}]}`
 	done := replyTo(serverR, serverW, respJSON)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -146,6 +154,9 @@ func TestACPProcess_Initialize_Success(t *testing.T) {
 	}
 	if !proc.agentCaps.LoadSession {
 		t.Error("expected LoadSession=true after Initialize")
+	}
+	if len(proc.authMethods) != 1 || proc.authMethods[0].ID != "cached_token" {
+		t.Errorf("authMethods: got %#v", proc.authMethods)
 	}
 
 	select {
@@ -202,6 +213,47 @@ func TestACPProcess_Initialize_Timeout(t *testing.T) {
 }
 
 // --- NewSession tests ---
+
+func TestACPProcess_Authenticate_Success(t *testing.T) {
+	proc, serverW, serverR := buildACPProcess(nil, nil)
+	defer serverW.Close()
+	defer serverR.Close()
+
+	done := replyTo(serverR, serverW, `{"_meta":{"auth_mode":"Oidc"}}`)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := proc.Authenticate(ctx, "cached_token"); err != nil {
+		t.Fatalf("Authenticate error: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for authenticate reply")
+	}
+}
+
+func TestACPProcess_Authenticate_Error(t *testing.T) {
+	proc, serverW, serverR := buildACPProcess(nil, nil)
+	defer serverW.Close()
+	defer serverR.Close()
+
+	done := replyError(serverR, serverW, -32000, "unauthorized")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := proc.Authenticate(ctx, "cached_token")
+	if err == nil {
+		t.Fatal("expected error from Authenticate")
+	}
+	if !strings.Contains(err.Error(), "acp authenticate") {
+		t.Errorf("expected 'acp authenticate' prefix, got %q", err.Error())
+	}
+	<-done
+}
 
 func TestACPProcess_NewSession_Success(t *testing.T) {
 	proc, serverW, serverR := buildACPProcess(nil, nil)

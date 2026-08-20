@@ -138,6 +138,63 @@ func TestProvidersHandlerRegisterInMemoryUsesDBNameForClaudeCLI(t *testing.T) {
 // added to mirror cmd/gateway_providers.go. If the configured CLI path does not resolve via exec.LookPath,
 // registerInMemory must return without registering — otherwise verify would succeed on a provider that
 // cannot actually spawn the CLI.
+func TestProvidersHandlerRegisterInMemoryACP(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows: shell-script fake binary not portable")
+	}
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	fake := writeFakeClaudeBinary(t)
+	// Rename-style: absolute path named grok so DefaultArgs apply, LookPath succeeds.
+	grokPath := filepath.Join(filepath.Dir(fake), "grok")
+	if err := os.Rename(fake, grokPath); err != nil {
+		t.Fatalf("rename fake grok: %v", err)
+	}
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "grok-build",
+		ProviderType: store.ProviderACP,
+		APIBase:      grokPath,
+		Enabled:      true,
+		Settings:     json.RawMessage(`{"perm_mode":"approve-all"}`),
+	}
+
+	if status := handler.registerInMemory(provider); status != providerRuntimeRegistered {
+		t.Fatalf("registerInMemory status = %q, want registered", status)
+	}
+	got, err := providerReg.GetForTenant(provider.TenantID, provider.Name)
+	if err != nil {
+		t.Fatalf("GetForTenant error = %v", err)
+	}
+	if got.Name() != provider.Name {
+		t.Fatalf("Name() = %q, want %q", got.Name(), provider.Name)
+	}
+}
+
+func TestProvidersHandlerRegisterInMemoryACPRejectsRelativeBinary(t *testing.T) {
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "evil-acp",
+		ProviderType: store.ProviderACP,
+		APIBase:      "bash",
+		Enabled:      true,
+	}
+
+	if status := handler.registerInMemory(provider); status != providerRuntimeInvalidConfig {
+		t.Fatalf("status = %q, want invalid_config", status)
+	}
+	if _, err := providerReg.GetForTenant(provider.TenantID, provider.Name); err == nil {
+		t.Fatal("relative non-allowlisted binary should not register")
+	}
+}
+
 func TestProvidersHandlerRegisterInMemorySkipsClaudeCLIWhenBinaryMissing(t *testing.T) {
 	providerReg := providers.NewRegistry(nil)
 	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")

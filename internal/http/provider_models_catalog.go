@@ -80,6 +80,7 @@ func acpModels() []ModelInfo {
 		{ID: "claude", Name: "Claude"},
 		{ID: "codex", Name: "Codex"},
 		{ID: "gemini", Name: "Gemini"},
+		{ID: "grok", Name: "Grok"},
 	}
 }
 

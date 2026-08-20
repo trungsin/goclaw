@@ -22,8 +22,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/providers/acp"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -196,10 +198,15 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 		}
 		return providerRuntimeDisabled
 	}
-	// ACP agents don't need an API key — skip in-memory registration
-	// (ACP providers are registered via gateway_providers.go on startup or restart)
+	// ACP agents don't need an API key — register immediately (parity with startup).
 	if p.ProviderType == store.ProviderACP {
-		return providerRuntimeSkipped
+		prov, err := providers.NewACPProviderFromRecord(p.Name, p.APIBase, p.Settings, tools.DefaultDenyPatterns())
+		if err != nil {
+			slog.Warn("acp: in-memory registration failed", "name", p.Name, "error", err)
+			return providerRuntimeInvalidConfig
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
+		return providerRuntimeRegistered
 	}
 	// Claude CLI doesn't need an API key — register immediately
 	if p.ProviderType == store.ProviderClaudeCLI {
@@ -329,7 +336,6 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 // rather than skipping SSRF validation entirely.
 var localURLProviderTypes = map[string]bool{
 	store.ProviderOllama: true,
-	store.ProviderACP:    true,
 }
 
 // allowedLocalHosts are the only hosts permitted for local provider types.
@@ -354,10 +360,10 @@ var allowPrivateProviderURLsFn = sync.OnceValue(func() bool {
 //
 // Logic:
 //  1. Empty URL → allowed (provider may not need a custom base).
-//  2. Claude CLI → api_base is an executable path/command, not a URL.
+//  2. Claude CLI / ACP → api_base is an executable path/command, not a URL.
 //  3. Scheme check (http/https only) → enforced for URL-based types, including
 //     local URL types. Blocks file://, gopher://, dict://, etc.
-//  4. Local URL types (ollama, acp) → host must be in allowedLocalHosts
+//  4. Local URL types (ollama) → host must be in allowedLocalHosts
 //     (explicit allowlist prevents reaching 169.254.169.254 or internal services
 //     via the local-type bypass).
 //  5. Remote types → if GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS is set, allow and log.
@@ -373,6 +379,9 @@ func validateProviderURL(rawURL string, providerType string) error {
 	}
 	if providerType == store.ProviderClaudeCLI {
 		return validateClaudeCLIExecutablePath(rawURL)
+	}
+	if providerType == store.ProviderACP {
+		return validateACPBinaryPath(rawURL)
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -439,6 +448,19 @@ func validateProviderURL(rawURL string, providerType string) error {
 			slog.Warn("security.provider_url.blocked_resolved", "host", host, "resolved_ip", ip.String(), "provider_type", providerType)
 			return fmt.Errorf("provider URL %q resolves to private/reserved address %s", host, ip)
 		}
+	}
+	return nil
+}
+
+func validateACPBinaryPath(path string) error {
+	if strings.Contains(path, "\x00") {
+		return fmt.Errorf("ACP binary path cannot contain NUL byte")
+	}
+	if _, err := url.ParseRequestURI(path); err == nil && strings.Contains(path, "://") {
+		return fmt.Errorf("ACP api_base must be an executable name or path, got URL %q", path)
+	}
+	if !acp.AllowedBinary(path) {
+		return fmt.Errorf("ACP api_base must be claude, codex, gemini, grok, or an absolute path to one of those binaries, got %q", path)
 	}
 	return nil
 }

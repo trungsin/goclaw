@@ -2,11 +2,23 @@ package acp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"time"
 )
+
+func resolveACPWorkDir(workDir string) string {
+	if workDir == "" {
+		workDir = "."
+	}
+	abs, err := filepath.Abs(workDir)
+	if err != nil {
+		return workDir
+	}
+	return abs
+}
 
 // Initialize sends the ACP initialize request to establish capabilities.
 func (p *ACPProcess) Initialize(ctx context.Context) error {
@@ -15,14 +27,34 @@ func (p *ACPProcess) Initialize(ctx context.Context) error {
 	req := InitializeRequest{
 		ProtocolVersion: 1,
 		ClientInfo:      ClientInfo{Name: "GoClaw", Version: "1.0"},
-		Capabilities:    ClientCaps{},
+		Capabilities: ClientCaps{
+			Fs:       &FsCaps{ReadTextFile: true, WriteTextFile: true},
+			Terminal: true,
+		},
 	}
 	var resp InitializeResponse
 	if err := p.conn.Call(ctx, "initialize", req, &resp); err != nil {
 		return fmt.Errorf("acp initialize: %w", err)
 	}
 	p.agentCaps = resp.Capabilities
-	slog.Info("acp: initialized", "agent", resp.AgentInfo.Name, "version", resp.AgentInfo.Version, "loadSession", resp.Capabilities.LoadSession)
+	p.authMethods = resp.AuthMethods
+	slog.Info("acp: initialized", "agent", resp.AgentInfo.Name, "version", resp.AgentInfo.Version, "loadSession", resp.Capabilities.LoadSession, "authMethods", len(resp.AuthMethods))
+	return nil
+}
+
+// Authenticate completes the ACP auth handshake when the agent advertised methods.
+func (p *ACPProcess) Authenticate(ctx context.Context, methodID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	req := AuthenticateRequest{
+		MethodID: methodID,
+		Meta:     map[string]any{"headless": true},
+	}
+	var resp json.RawMessage
+	if err := p.conn.Call(ctx, "authenticate", req, &resp); err != nil {
+		return fmt.Errorf("acp authenticate: %w", err)
+	}
+	slog.Info("acp: authenticated", "method", methodID)
 	return nil
 }
 
@@ -31,10 +63,7 @@ func (p *ACPProcess) NewSession(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	cwd := p.workDir
-	if cwd == "" {
-		cwd, _ = filepath.Abs(".")
-	}
+	cwd := resolveACPWorkDir(p.workDir)
 
 	req := NewSessionRequest{
 		Cwd:        cwd,
@@ -55,12 +84,7 @@ func (p *ACPProcess) LoadSession(ctx context.Context, sessionID string) (string,
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	cwd := p.workDir
-	if cwd == "" {
-		cwd, _ = filepath.Abs(".")
-	}
-
-	req := LoadSessionRequest{SessionID: sessionID, Cwd: cwd}
+	req := LoadSessionRequest{SessionID: sessionID, Cwd: resolveACPWorkDir(p.workDir)}
 	var resp LoadSessionResponse
 	if err := p.conn.Call(ctx, "session/load", req, &resp); err != nil {
 		return "", fmt.Errorf("acp session/load: %w", err)

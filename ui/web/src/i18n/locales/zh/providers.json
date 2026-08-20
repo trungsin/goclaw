@@ -135,7 +135,7 @@
     "description": "将兼容 ACP 的编程代理作为子进程进行编排。无需 API 密钥。",
     "binary": "二进制文件",
     "binaryPlaceholder": "claude",
-    "binaryHint": "ACP 代理二进制文件的路径或名称（例如 claude、codex、gemini）",
+    "binaryHint": "ACP 代理二进制文件的路径或名称（例如 claude、codex、gemini、grok）",
     "args": "参数",
     "argsPlaceholder": "--profile goclaw",
     "argsHint": "传递给二进制文件的以空格分隔的参数",

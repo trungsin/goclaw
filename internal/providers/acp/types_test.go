@@ -25,7 +25,7 @@ func TestInitializeRequest_RoundTrip(t *testing.T) {
 		ClientInfo: ClientInfo{Name: "goclaw", Version: "1.0"},
 		Capabilities: ClientCaps{
 			Fs:       &FsCaps{ReadTextFile: true, WriteTextFile: false},
-			Terminal: &TerminalCaps{Enabled: true},
+			Terminal: true,
 		},
 	}
 	_, got := roundTrip(t, req)
@@ -41,14 +41,15 @@ func TestInitializeRequest_RoundTrip(t *testing.T) {
 	if got.Capabilities.Fs.WriteTextFile {
 		t.Error("Capabilities.Fs.WriteTextFile should be false")
 	}
-	if got.Capabilities.Terminal == nil || !got.Capabilities.Terminal.Enabled {
-		t.Error("Capabilities.Terminal.Enabled should be true")
+	if !got.Capabilities.Terminal {
+		t.Error("Capabilities.Terminal should be true")
 	}
 }
 
 func TestInitializeResponse_RoundTrip(t *testing.T) {
 	resp := InitializeResponse{
-		AgentInfo: AgentInfo{Name: "claude-code", Version: "2.0"},
+		AgentInfo:   AgentInfo{Name: "claude-code", Version: "2.0"},
+		AuthMethods: []AuthMethod{{ID: "cached_token", Name: "cached_token"}},
 		Capabilities: AgentCaps{
 			LoadSession: true,
 			PromptCapabilities: &PromptCaps{
@@ -62,6 +63,9 @@ func TestInitializeResponse_RoundTrip(t *testing.T) {
 	_, got := roundTrip(t, resp)
 	if got.AgentInfo.Name != "claude-code" {
 		t.Errorf("AgentInfo.Name: got %q", got.AgentInfo.Name)
+	}
+	if len(got.AuthMethods) != 1 || got.AuthMethods[0].ID != "cached_token" {
+		t.Errorf("AuthMethods: got %#v", got.AuthMethods)
 	}
 	if !got.Capabilities.LoadSession {
 		t.Error("LoadSession should be true")

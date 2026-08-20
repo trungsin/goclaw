@@ -68,7 +68,7 @@ func TestValidateProviderURL(t *testing.T) {
 		{"file scheme remote", "file:///etc/passwd", "openai_compat", true},
 		{"gopher scheme remote", "gopher://internal:25", "openai_compat", true},
 		{"file scheme ollama", "file:///etc/passwd", "ollama", true},       // H-1: scheme enforced even for local types
-		{"gopher scheme acp", "gopher://localhost:25", "acp", true},        // H-1: scheme enforced even for local types
+		{"gopher scheme acp", "gopher://localhost:25", "acp", true},        // ACP api_base is a binary, not a URL
 		{"file scheme claude_cli", "file:///bin/bash", "claude_cli", true}, // H-1: scheme enforced for URL-like Claude CLI values
 
 		// --- Local type: allowlist-only ---
@@ -76,7 +76,8 @@ func TestValidateProviderURL(t *testing.T) {
 		{"ollama 127.0.0.1", "http://127.0.0.1:11434/v1", "ollama", false},
 		{"ollama ::1", "http://[::1]:11434/v1", "ollama", false},
 		{"ollama host.docker.internal", "http://host.docker.internal:11434/v1", "ollama", false},
-		{"acp 127.0.0.1", "http://127.0.0.1:9090", "acp", false},
+		{"acp named grok", "grok", "acp", false},
+		{"acp named claude", "claude", "acp", false},
 		{"claude_cli command name", "claude", "claude_cli", false},
 		{"claude_cli absolute path", absClaudePath, "claude_cli", false},
 
@@ -88,7 +89,8 @@ func TestValidateProviderURL(t *testing.T) {
 		{"ollama link-local", "http://169.254.1.1:8080/v1", "ollama", true},
 		{"ollama .internal", "http://redis.internal:6379/v1", "ollama", true},
 		{"ollama gcp metadata", "http://metadata.google.internal/computeMetadata/v1/", "ollama", true},
-		{"acp private", "http://10.0.0.1:8080/v1", "acp", true},
+		{"acp private URL", "http://10.0.0.1:8080/v1", "acp", true},
+		{"acp bash", "bash", "acp", true},
 
 		// --- Remote type literal blocked IPs ---
 		{"remote localhost", "http://localhost:8080", "openai_compat", true},
@@ -186,7 +188,7 @@ func TestValidateProviderURL_LocalTypesIgnoreAllowPrivateFlag(t *testing.T) {
 		{"http://ollama:11434/v1", "ollama"},
 		{"http://host.lan:11434/v1", "ollama"},
 		{"http://10.0.0.5:11434/v1", "ollama"},
-		{"http://acp-sidecar:9090", "acp"},
+		{"http://acp-sidecar:9090", "ollama"},
 	}
 	for _, c := range cases {
 		if err := validateProviderURL(c.url, c.providerType); err == nil {
@@ -206,7 +208,6 @@ func TestValidateProviderURL_LocalTypeSchemeEnforced(t *testing.T) {
 	}{
 		{"file:///etc/passwd", "ollama"},
 		{"gopher://localhost:25", "ollama"},
-		{"file:///etc/passwd", "acp"},
 	}
 	for _, c := range cases {
 		err := validateProviderURL(c.url, c.providerType)
@@ -272,12 +273,37 @@ func TestValidateProviderURL_LocalTypeAllowedHosts(t *testing.T) {
 		{"http://127.0.0.1:11434/v1", "ollama"},
 		{"http://[::1]:11434/v1", "ollama"},
 		{"http://host.docker.internal:11434/v1", "ollama"},
-		{"http://localhost:9090", "acp"},
-		{"http://127.0.0.1:9090", "acp"},
 	}
 	for _, a := range allowed {
 		if err := validateProviderURL(a.url, a.providerType); err != nil {
 			t.Errorf("expected %s / %s to be allowed, got: %v", a.url, a.providerType, err)
+		}
+	}
+}
+
+func TestValidateProviderURL_ACPBinaryPath(t *testing.T) {
+	saveAndRestoreGlobals(t)
+	absGrok := filepath.Join(t.TempDir(), "grok")
+	absBash := filepath.Join(t.TempDir(), "bash")
+
+	allowed := []string{"", "grok", "claude", "codex", "gemini", absGrok}
+	for _, raw := range allowed {
+		if err := validateProviderURL(raw, "acp"); err != nil {
+			t.Errorf("expected ACP binary %q to be allowed, got: %v", raw, err)
+		}
+	}
+
+	blocked := []string{
+		"bash",
+		absBash,
+		"file:///usr/local/bin/grok",
+		"https://api.x.ai/v1",
+		"relative/grok",
+		"http://127.0.0.1:9090",
+	}
+	for _, raw := range blocked {
+		if err := validateProviderURL(raw, "acp"); err == nil {
+			t.Errorf("expected ACP binary %q to be rejected", raw)
 		}
 	}
 }

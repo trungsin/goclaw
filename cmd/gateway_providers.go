@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/providers/acp"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -457,6 +458,10 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 
 // registerACPFromConfig registers an ACP provider from config file settings.
 func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
+	if !acp.AllowedBinary(cfg.Binary) {
+		slog.Warn("security.acp: invalid binary path from config", "path", cfg.Binary)
+		return
+	}
 	if _, err := exec.LookPath(cfg.Binary); err != nil {
 		slog.Warn("acp: binary not found, skipping", "binary", cfg.Binary, "error", err)
 		return
@@ -469,7 +474,7 @@ func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
 	}
 	workDir := cfg.WorkDir
 	if workDir == "" {
-		workDir = defaultACPWorkDir()
+		workDir = providers.DefaultACPWorkDir()
 	}
 	var opts []providers.ACPOption
 	if cfg.Model != "" {
@@ -486,50 +491,11 @@ func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
 
 // registerACPFromDB registers an ACP provider from a DB provider row.
 func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
-	binary := p.APIBase // repurpose api_base as binary path
-	if binary == "" {
-		slog.Warn("acp: no binary specified in DB provider", "name", p.Name)
+	prov, err := providers.NewACPProviderFromRecord(p.Name, p.APIBase, p.Settings, tools.DefaultDenyPatterns())
+	if err != nil {
+		slog.Warn("acp: skip DB provider", "name", p.Name, "error", err)
 		return
 	}
-	if binary != "claude" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
-		slog.Warn("security.acp: invalid binary path from DB", "path", binary)
-		return
-	}
-	if _, err := exec.LookPath(binary); err != nil {
-		slog.Warn("acp: binary not found, skipping", "binary", binary, "error", err)
-		return
-	}
-	// Parse settings JSONB for extra config
-	var settings struct {
-		Args     []string `json:"args"`
-		IdleTTL  string   `json:"idle_ttl"`
-		PermMode string   `json:"perm_mode"`
-		WorkDir  string   `json:"work_dir"`
-	}
-	if p.Settings != nil {
-		if err := json.Unmarshal(p.Settings, &settings); err != nil {
-			slog.Warn("acp: invalid settings JSON, using defaults", "name", p.Name, "error", err)
-		}
-	}
-	idleTTL := 5 * time.Minute
-	if settings.IdleTTL != "" {
-		if d, err := time.ParseDuration(settings.IdleTTL); err == nil {
-			idleTTL = d
-		}
-	}
-	workDir := settings.WorkDir
-	if workDir == "" {
-		workDir = defaultACPWorkDir()
-	}
-	registry.RegisterForTenant(p.TenantID, providers.NewACPProvider(
-		binary, settings.Args, workDir, idleTTL, tools.DefaultDenyPatterns(),
-		providers.WithACPName(p.Name),
-		providers.WithACPModel(p.Name),
-	))
+	registry.RegisterForTenant(p.TenantID, prov)
 	slog.Info("registered provider from DB", "name", p.Name, "type", "acp")
-}
-
-// defaultACPWorkDir returns the default workspace directory for ACP agents.
-func defaultACPWorkDir() string {
-	return filepath.Join(config.ResolvedDataDirFromEnv(), "acp-workspaces")
 }

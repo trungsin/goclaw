@@ -34,6 +34,12 @@ func TestFilterACPEnv_RemovesSensitivePrefixes(t *testing.T) {
 			kept:    []string{"TERM=xterm"},
 		},
 		{
+			name:    "XAI_ prefix stripped",
+			env:     []string{"XAI_API_KEY=xai-test", "HOME=/root"},
+			removed: []string{"XAI_API_KEY=xai-test"},
+			kept:    []string{"HOME=/root"},
+		},
+		{
 			name:    "DATABASE prefix",
 			env:     []string{"DATABASE_URL=postgres://host/db", "USER=alice"},
 			removed: []string{"DATABASE_URL=postgres://host/db"},
@@ -111,6 +117,27 @@ func TestFilterACPEnv_RemovesExactNames(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestInjectGrokAPIKey_OnlyGrok(t *testing.T) {
+	t.Setenv("XAI_API_KEY", "")
+	t.Setenv("GOCLAW_XAI_API_KEY", "from-goclaw")
+	got := injectGrokAPIKey([]string{"HOME=/tmp"}, "grok")
+	found := false
+	for _, e := range got {
+		if e == "XAI_API_KEY=from-goclaw" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected injected XAI_API_KEY, got %v", got)
+	}
+	claude := injectGrokAPIKey([]string{"HOME=/tmp"}, "claude")
+	for _, e := range claude {
+		if strings.HasPrefix(e, "XAI_API_KEY=") {
+			t.Fatalf("claude must not receive xAI key, got %v", claude)
+		}
 	}
 }
 

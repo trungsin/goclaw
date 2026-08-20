@@ -80,7 +80,7 @@
     "description": "Orchestrate ACP-compatible coding agents as subprocesses. No API key needed.",
     "binary": "Binary",
     "binaryPlaceholder": "claude",
-    "binaryHint": "Path or name of the ACP agent binary (e.g. claude, codex, gemini)",
+    "binaryHint": "Path or name of the ACP agent binary (e.g. claude, codex, gemini, grok)",
     "args": "Arguments",
     "argsPlaceholder": "--profile goclaw",
     "argsHint": "Space-separated arguments passed to the binary",

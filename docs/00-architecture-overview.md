@@ -44,7 +44,7 @@ flowchart TD
     subgraph Providers["LLM Providers"]
         ANTH[Anthropic -- Native HTTP + SSE]
         OAI["OpenAI-Compatible -- HTTP + SSE<br/>(OpenAI, Gemini, DeepSeek, DashScope, +8)"]
-        ACP["ACP -- JSON-RPC 2.0 stdio<br/>(Claude Code, Codex, Gemini CLI)"]
+        ACP["ACP -- JSON-RPC 2.0 stdio<br/>(Claude Code, Codex, Gemini CLI, Grok Build)"]
     end
 
     subgraph Tools["Tool Registry"]

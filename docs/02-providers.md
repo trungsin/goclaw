@@ -356,7 +356,7 @@ Standard OpenAI-compatible provider targeting the Alibaba Coding API.
 
 ## 10. ACP Provider (Agent Client Protocol)
 
-The ACP provider enables GoClaw to orchestrate external coding agents (Claude Code, Codex CLI, Gemini CLI, or any ACP-compatible agent) as subprocesses via JSON-RPC 2.0 over stdio. This allows delegating complex code generation tasks to specialized agents while maintaining GoClaw's unified interface.
+The ACP provider enables GoClaw to orchestrate external coding agents (Claude Code, Codex CLI, Gemini CLI, Grok Build, or any ACP-compatible agent) as subprocesses via JSON-RPC 2.0 over stdio. This allows delegating complex code generation tasks to specialized agents while maintaining GoClaw's unified interface.
 
 ### Architecture Overview
 
@@ -383,7 +383,7 @@ ACPConfig struct fields:
 
 ```go
 type ACPConfig struct {
-	Binary   string   // agent binary name or path (e.g. "claude", "codex")
+	Binary   string   // agent binary name or path (e.g. "claude", "codex", "grok")
 	Args     []string // extra spawn args
 	Model    string   // default model/agent name (e.g. "claude")
 	WorkDir  string   // base workspace dir
@@ -412,8 +412,10 @@ Example config.json:
 Database-based provider registration:
 
 - `provider_type = "acp"`
-- `api_base = "claude"` (binary name)
+- `api_base = "claude"` | `"codex"` | `"gemini"` | `"grok"` (binary name, or an absolute path)
 - `settings = { "args": [...], "idle_ttl": "5m", "perm_mode": "approve-all", "work_dir": "..." }`
+- Grok Build defaults empty `args` to `["agent", "stdio"]` and authenticates via `cached_token` or `XAI_API_KEY` after `initialize`
+- `session/new` always sends an absolute `cwd` (Grok rejects `.`)
 
 ### Session Management
 

@@ -19,14 +19,15 @@ type ACPProcess struct {
 	cmd  *exec.Cmd
 	conn *Conn
 
-	agentCaps  AgentCaps
-	workDir    string
-	lastActive time.Time
-	inUse      atomic.Int32 // >0 means at least one prompt is active — reaper must skip
-	mu         sync.Mutex
-	ctx        context.Context
-	cancel     context.CancelFunc
-	exited     chan struct{} // closed when process exits
+	agentCaps   AgentCaps
+	authMethods []AuthMethod
+	workDir     string
+	lastActive  time.Time
+	inUse       atomic.Int32 // >0 means at least one prompt is active — reaper must skip
+	mu          sync.Mutex
+	ctx         context.Context
+	cancel      context.CancelFunc
+	exited      chan struct{} // closed when process exits
 
 	// updateFns routes session/update notifications to the correct active prompt.
 	updateFns map[string]func(SessionUpdate)
@@ -176,7 +177,7 @@ func (pp *ProcessPool) spawn(ctx context.Context, poolKey string) (*ACPProcess, 
 
 	cmd := exec.CommandContext(procCtx, pp.agentBinary, pp.agentArgs...)
 	cmd.Dir = pp.workDir
-	cmd.Env = filterACPEnv(os.Environ())
+	cmd.Env = injectGrokAPIKey(filterACPEnv(os.Environ()), pp.agentBinary)
 	cmd.SysProcAttr = sysProcAttr()
 
 	stdinPipe, err := cmd.StdinPipe()
@@ -236,6 +237,25 @@ func (pp *ProcessPool) spawn(ctx context.Context, poolKey string) (*ACPProcess, 
 	if err := proc.Initialize(ctx); err != nil {
 		cancel()
 		return nil, err
+	}
+	cands, err := AuthMethodCandidates(proc.authMethods, os.Getenv)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	var authErr error
+	for _, methodID := range cands {
+		if err := proc.Authenticate(ctx, methodID); err != nil {
+			slog.Warn("acp: authenticate failed, trying next method", "method", methodID, "error", err)
+			authErr = err
+			continue
+		}
+		authErr = nil
+		break
+	}
+	if authErr != nil {
+		cancel()
+		return nil, authErr
 	}
 
 	pp.processes.Store(poolKey, proc)

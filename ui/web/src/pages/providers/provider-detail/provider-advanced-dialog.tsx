@@ -20,6 +20,7 @@ import {
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import { PROVIDER_TYPES } from "@/constants/providers";
 import { CLISection } from "../provider-cli-section";
+import { defaultAcpArgsForBinary } from "../provider-acp-section";
 import { OAuthSection } from "../provider-oauth-section";
 import type { ProviderData, ProviderInput } from "@/types/provider";
 
@@ -170,7 +171,11 @@ export function ProviderAdvancedDialog({
                   <Input
                     id="acpBinary"
                     value={acpBinary}
-                    onChange={(e) => setAcpBinary(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setAcpBinary(next);
+                      setAcpArgs((prev) => defaultAcpArgsForBinary(next, prev));
+                    }}
                     placeholder={t("acp.binaryPlaceholder")}
                     className="text-base md:text-sm"
                   />

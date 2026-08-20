@@ -16,8 +16,8 @@ type ClientInfo struct {
 }
 
 type ClientCaps struct {
-	Fs       *FsCaps       `json:"fs,omitempty"`
-	Terminal *TerminalCaps `json:"terminal,omitempty"`
+	Fs       *FsCaps `json:"fs,omitempty"`
+	Terminal bool    `json:"terminal,omitempty"`
 }
 
 type FsCaps struct {
@@ -25,13 +25,10 @@ type FsCaps struct {
 	WriteTextFile bool `json:"writeTextFile"`
 }
 
-type TerminalCaps struct {
-	Enabled bool `json:"enabled"`
-}
-
 type InitializeResponse struct {
-	AgentInfo    AgentInfo `json:"agentInfo"`
-	Capabilities AgentCaps `json:"agentCapabilities"`
+	AgentInfo    AgentInfo    `json:"agentInfo"`
+	Capabilities AgentCaps    `json:"agentCapabilities"`
+	AuthMethods  []AuthMethod `json:"authMethods,omitempty"`
 }
 
 type AgentInfo struct {
@@ -107,14 +104,14 @@ type ContentBlock struct {
 type SessionUpdate struct {
 	SessionID  string `json:"sessionId"`
 	StopReason string `json:"stopReason,omitempty"`
-	
+
 	Kind     string          `json:"kind,omitempty"`
 	Message  *MessageUpdate  `json:"message,omitempty"`
 	ToolCall *ToolCallUpdate `json:"toolCall,omitempty"`
 
 	Update struct {
 		SessionUpdate string `json:"sessionUpdate"`
-		
+
 		Content json.RawMessage `json:"content,omitempty"`
 
 		Entries []struct {

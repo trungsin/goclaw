@@ -9,6 +9,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+export function defaultAcpArgsForBinary(binary: string, currentArgs: string): string {
+  if (currentArgs.trim()) return currentArgs;
+  const base = binary.trim().split(/[\\/]/).pop()?.replace(/\.exe$/i, "") ?? "";
+  if (base === "grok") return "agent stdio";
+  return currentArgs;
+}
+
 interface ACPSectionProps {
   binary: string;
   onBinaryChange: (v: string) => void;
@@ -40,8 +47,14 @@ export function ACPSection({
         <Input
           id="acpBinary"
           value={binary}
-          onChange={(e) => onBinaryChange(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            onBinaryChange(next);
+            const filled = defaultAcpArgsForBinary(next, args);
+            if (filled !== args) onArgsChange(filled);
+          }}
           placeholder={t("acp.binaryPlaceholder")}
+          className="text-base md:text-sm"
         />
         <p className="text-xs text-muted-foreground">{t("acp.binaryHint")}</p>
       </div>
@@ -52,7 +65,8 @@ export function ACPSection({
           id="acpArgs"
           value={args}
           onChange={(e) => onArgsChange(e.target.value)}
-          placeholder={t("acp.argsPlaceholder")}
+          placeholder={binary.trim().split(/[\\/]/).pop()?.replace(/\.exe$/i, "") === "grok" ? "agent stdio" : t("acp.argsPlaceholder")}
+          className="text-base md:text-sm"
         />
         <p className="text-xs text-muted-foreground">{t("acp.argsHint")}</p>
       </div>
@@ -65,6 +79,7 @@ export function ACPSection({
             value={idleTTL}
             onChange={(e) => onIdleTTLChange(e.target.value)}
             placeholder={t("acp.idleTTLPlaceholder")}
+            className="text-base md:text-sm"
           />
           <p className="text-xs text-muted-foreground">{t("acp.idleTTLHint")}</p>
         </div>
@@ -91,6 +106,7 @@ export function ACPSection({
           value={workDir}
           onChange={(e) => onWorkDirChange(e.target.value)}
           placeholder={t("acp.workDirPlaceholder")}
+          className="text-base md:text-sm"
         />
         <p className="text-xs text-muted-foreground">{t("acp.workDirHint")}</p>
       </div>

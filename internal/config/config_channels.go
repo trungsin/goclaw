@@ -247,7 +247,7 @@ type ClaudeCLIConfig struct {
 }
 
 // ACPConfig configures the ACP (Agent Client Protocol) provider.
-// Orchestrates any ACP-compatible coding agent (Claude Code, Codex CLI, Gemini CLI) as a subprocess.
+// Orchestrates any ACP-compatible coding agent (Claude Code, Codex CLI, Gemini CLI, Grok Build) as a subprocess.
 type ACPConfig struct {
 	Binary   string   `json:"binary"`    // agent binary name or path (e.g. "claude", "codex")
 	Args     []string `json:"args"`      // extra spawn args

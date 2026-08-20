@@ -15,7 +15,7 @@ import (
 
 // acpSessionEntry tracks a live ACP session for one goclaw conversation.
 type acpSessionEntry struct {
-	id       string       // ACP session ID returned by session/new or session/load
+	id       string          // ACP session ID returned by session/new or session/load
 	proc     *acp.ACPProcess // process that owns this session (for respawn detection)
 	lastUsed time.Time
 }
@@ -69,6 +69,7 @@ func WithACPPermMode(mode string) ACPOption {
 
 // NewACPProvider creates a provider that orchestrates ACP agents as subprocesses.
 func NewACPProvider(binary string, args []string, workDir string, idleTTL time.Duration, denyPatterns []*regexp.Regexp, opts ...ACPOption) *ACPProvider {
+	args = acp.DefaultArgs(binary, args)
 	// Pool key identifies the shared process: binary + args combination
 	poolKey := binary
 	if len(args) > 0 {
